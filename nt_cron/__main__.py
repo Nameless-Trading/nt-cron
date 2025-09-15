@@ -7,7 +7,9 @@ def game_schedule_cron() -> None:
     today = dt.date.today() - dt.timedelta(days=1)
     records = get_game_schedule()
 
-    return (
+    print(records)
+
+    df =  (
         pl.DataFrame(records)
         .select(
             "season", "week", "startTime", "isStartTimeTBD", "homeTeam", "awayTeam"
@@ -29,6 +31,10 @@ def game_schedule_cron() -> None:
         .sort('start_time')
         .to_dicts()
     )
+
+    print(df)
+
+    return df
 
 if __name__ == '__main__':
     print(
