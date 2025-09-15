@@ -10,9 +10,9 @@ load_dotenv(override=True)
 
 def open_markets_job() -> None:
     kalshi_api_key = os.getenv("KALSHI_API_KEY")
-    private_key_path = "kalshi-api-key.txt"
+    private_key = os.getenv("KALSHI_PRIVATE_KEY")
 
-    kalshi_client = KalshiClient(kalshi_api_key, private_key_path)
+    kalshi_client = KalshiClient(kalshi_api_key, private_key)
 
     markets = kalshi_client.get_markets()
 

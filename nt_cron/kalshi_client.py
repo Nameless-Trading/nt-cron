@@ -37,13 +37,12 @@ def create_headers(
 
 
 class KalshiClient:
-    def __init__(self, kalshi_api_key: str, private_key_path: str) -> None:
+    def __init__(self, kalshi_api_key: str, private_key: str) -> None:
         self._kalshi_api_key = kalshi_api_key
 
-        with open(private_key_path, "rb") as f:
-            self._private_key = serialization.load_pem_private_key(
-                f.read(), password=None
-            )
+        self._private_key = serialization.load_pem_private_key(
+            private_key.encode('utf-8'), password=None
+        )
 
     def get_tickers(self) -> list[str]:
         base_url = "https://api.elections.kalshi.com"

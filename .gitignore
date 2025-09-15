@@ -1,4 +1,5 @@
 *.env
 *.txt
 .venv
+.archive
 __pycache__
