@@ -1,2 +1,3 @@
 from .game_schedule_job import game_schedule_job
 from .schedule_notifications_job import schedule_notifications_job
+from .open_markets_job import open_markets_job
