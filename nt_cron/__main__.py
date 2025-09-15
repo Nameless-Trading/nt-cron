@@ -1,3 +1,4 @@
-from nt_cron.jobs import daily_game_schedule_job
+from nt_cron.jobs import game_schedule_job, schedule_notifications_job
 
-daily_game_schedule_job()
+game_schedule_job()
+schedule_notifications_job()

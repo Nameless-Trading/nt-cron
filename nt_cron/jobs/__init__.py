@@ -1,1 +1,2 @@
-from .daily_game_schedule_job import daily_game_schedule_job
+from .game_schedule_job import game_schedule_job
+from .schedule_notifications_job import schedule_notifications_job
