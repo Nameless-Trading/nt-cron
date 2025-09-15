@@ -13,6 +13,7 @@ client = WebClient(token=token)
 
 class Channel(Enum):
     Testing = "C09F2T6SU2H"
+    General = "C09FJV0AM33"
 
 
 def send_message(channel: Channel, text: str) -> None:

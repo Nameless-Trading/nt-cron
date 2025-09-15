@@ -45,5 +45,5 @@ def schedule_notifications_job() -> None:
         )
         notification_time = game.start_time - dt.timedelta(minutes=30)
         schedule_message(
-            channel=Channel.Testing, text=message, schedule_time=notification_time
+            channel=Channel.General, text=message, schedule_time=notification_time
         )
