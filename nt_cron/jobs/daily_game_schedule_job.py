@@ -25,7 +25,6 @@ def daily_game_schedule_job() -> None:
             pl.col('start_time').dt.convert_time_zone('America/Denver'),
             pl.lit(today).alias('last_update_date')
         )
-        .filter(pl.col('start_time').dt.date().eq(today))
         .unique()
         .sort('start_time')
     )
