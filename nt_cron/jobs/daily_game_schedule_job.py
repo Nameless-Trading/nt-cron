@@ -4,7 +4,7 @@ import datetime as dt
 import polars as pl
 
 def daily_game_schedule_job() -> None:
-    today = dt.date.today() - dt.timedelta(days=1)
+    today = dt.date.today()
     records = get_game_schedule()
 
     df =  (
