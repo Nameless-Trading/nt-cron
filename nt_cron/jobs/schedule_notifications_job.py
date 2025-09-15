@@ -7,29 +7,29 @@ from dataclasses import dataclass
 
 @dataclass
 class Game:
+    event_ticker: str
     start_time: dt.datetime
-    is_start_time_tbd: bool
-    home_team: str
-    away_team: str
+    title: str
 
 
 def get_games(date_: dt.date) -> list[Game]:
     games = (
-        read_dataframe("schedule")
+        read_dataframe("open_markets")
         .with_columns(
-            pl.col("start_time").dt.convert_time_zone("America/Denver"),
+            pl.col("estimated_start_time").dt.convert_time_zone("America/Denver"),
         )
-        .filter(pl.col("start_time").dt.date().eq(date_))
-        .sort("start_time")
+        .select('event_ticker', 'title', 'estimated_start_time').unique()
+        .with_columns(pl.col('title').str.replace(" Winner\\?", ""))
+        .filter(pl.col("estimated_start_time").dt.date().eq(date_))
+        .sort("estimated_start_time")
         .to_dicts()
     )
 
     return [
         Game(
-            start_time=game["start_time"],
-            is_start_time_tbd=game["is_start_time_tbd"],
-            home_team=game["home_team"],
-            away_team=game["away_team"],
+            event_ticker=game['event_ticker'],
+            start_time=game["estimated_start_time"],
+            title=game['title']
         )
         for game in games
     ]
@@ -40,11 +40,10 @@ def schedule_notifications_job() -> None:
     games = get_games(today)
 
     for game in games:
-        if not game.is_start_time_tbd:
-            message = (
-                f"Alert: {game.home_team} vs. {game.away_team} starts in 30 minutes!"
-            )
-            notification_time = game.start_time - dt.timedelta(minutes=30)
-            schedule_message(
-                channel=Channel.Testing, text=message, schedule_time=notification_time
-            )
+        message = (
+            f"Alert: {game.title} starts in 30 minutes!"
+        )
+        notification_time = game.start_time - dt.timedelta(minutes=30)
+        schedule_message(
+            channel=Channel.Testing, text=message, schedule_time=notification_time
+        )
