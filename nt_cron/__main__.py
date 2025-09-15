@@ -1,4 +1,4 @@
-from app.cfbd_client import get_game_schedule
+from nt_cron.cfbd_client import get_game_schedule
 import datetime as dt
 from rich import print
 import polars as pl
