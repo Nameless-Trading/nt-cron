@@ -4,7 +4,7 @@ from nt_cron.slack import schedule_message, Channel, list_scheduled_messages
 
 def test_run():
     today = dt.date.today()
-    time = dt.time(15, 47, tzinfo=ZoneInfo('America/Denver'))
+    time = dt.time(15, 59, tzinfo=ZoneInfo('America/Denver'))
     notification_time = dt.datetime.combine(today, time)
     print(f"notification_time = {notification_time}")
 
