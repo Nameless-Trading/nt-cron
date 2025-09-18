@@ -3,6 +3,7 @@ from slack_sdk import WebClient
 from dotenv import load_dotenv
 import datetime
 from enum import Enum
+from zoneinfo import ZoneInfo
 
 load_dotenv(override=True)
 
@@ -23,7 +24,7 @@ def send_message(channel: Channel, text: str) -> None:
 def schedule_message(
     channel: Channel, text: str, schedule_time: datetime.datetime
 ) -> None:
-    schedule_timestamp = schedule_time.strftime("%s")
+    schedule_timestamp = str(int(schedule_time.astimezone(ZoneInfo('UTC')).timestamp()))
 
     client.chat_scheduleMessage(
         channel=channel.value, text=text, post_at=schedule_timestamp

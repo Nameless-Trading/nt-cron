@@ -3,6 +3,7 @@ from nt_cron.database import read_dataframe
 from nt_cron.slack import schedule_message, Channel
 import polars as pl
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 
 @dataclass
@@ -36,7 +37,8 @@ def get_games(date_: dt.date) -> list[Game]:
 
 
 def schedule_notifications_job() -> None:
-    today = dt.date.today()
+    denver_tz = ZoneInfo('America/Denver')
+    today = dt.datetime.now(denver_tz).date()
     games = get_games(today)
 
     for game in games:
