@@ -2,4 +2,4 @@ from nt_cron.jobs import game_schedule_job, schedule_notifications_job, open_mar
 
 open_markets_job()
 game_schedule_job()
-schedule_notifications_job()
+# schedule_notifications_job()
