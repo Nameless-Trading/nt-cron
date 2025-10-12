@@ -1,11 +1,26 @@
 import base64
 import json
 import time
-import websockets
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 import requests
+import os
+from dotenv import load_dotenv
+from rich import print
 
+load_dotenv(override=True)
+
+API_KEY = os.getenv("KALSHI_API_KEY")
+PRIVATE_KEY = os.getenv("KALSHI_PRIVATE_KEY")
+BASE_URL = os.getenv("KALSHI_API_BASE")
+
+if API_KEY is None: raise ValueError("KALSHI_API_KEY is not set!")
+if PRIVATE_KEY is None: raise ValueError("KALSHI_PRIVATE_KEY is not set!")
+if BASE_URL is None: raise ValueError("KALSHI_API_BASE is not set!")
+
+PRIVATE_KEY_SERIALIZED = serialization.load_pem_private_key(
+    PRIVATE_KEY.encode('utf-8'), password=None
+)
 
 def sign_pss_text(private_key, text: str) -> str:
     """Sign message using RSA-PSS"""
@@ -28,89 +43,62 @@ def create_headers(
     msg_string = timestamp + method + path.split("?")[0]
     signature = sign_pss_text(private_key, msg_string)
 
-    return {
+    headers = {
         "Content-Type": "application/json",
         "KALSHI-ACCESS-KEY": kalshi_api_key,
         "KALSHI-ACCESS-SIGNATURE": signature,
         "KALSHI-ACCESS-TIMESTAMP": timestamp,
     }
 
+    print(headers)
 
-class KalshiClient:
-    def __init__(self, kalshi_api_key: str, private_key: str) -> None:
-        self._kalshi_api_key = kalshi_api_key
+    return headers
 
-        self._private_key = serialization.load_pem_private_key(
-            private_key.encode('utf-8'), password=None
-        )
+def get_tickers() -> list[str]:
+    endpoint = "/markets"
+    method = "GET"
 
-    def get_tickers(self) -> list[str]:
-        base_url = "https://api.elections.kalshi.com"
-        endpoint = "/trade-api/v2/markets/"
-        method = "GET"
+    params = {"limit": 1000, "status": "open", "series_ticker": "KXNCAAFGAME"}
 
-        params = {"limit": 1000, "status": "open", "series_ticker": "KXNCAAFGAME"}
+    headers = create_headers(
+        PRIVATE_KEY_SERIALIZED, API_KEY, method, endpoint
+    )
 
-        headers = create_headers(
-            self._private_key, self._kalshi_api_key, method, endpoint
-        )
+    response = requests.get(BASE_URL + endpoint, params=params, headers=headers)
+    markets = response.json()["markets"]
 
-        response = requests.get(base_url + endpoint, params=params, headers=headers)
-        markets = response.json()["markets"]
+    tickers = [market["ticker"] for market in markets]
 
-        tickers = [market["ticker"] for market in markets]
+    return tickers
 
-        return tickers
+def get_markets(tickers: list[str] | None = None) -> list[str]:
+    endpoint = "/markets"
+    method = "GET"
 
-    def get_markets(self, tickers: list[str] | None = None) -> list[str]:
-        base_url = "https://api.elections.kalshi.com"
-        endpoint = "/trade-api/v2/markets/"
-        method = "GET"
+    params = {"limit": 1000, "status": "open", "series_ticker": "KXNCAAFGAME"}
 
-        params = {"limit": 1000, "status": "open", "series_ticker": "KXNCAAFGAME"}
+    if tickers is not None:
+        params["tickers"] = ",".join(tickers)
 
-        if tickers is not None:
-            params["tickers"] = ",".join(tickers)
+    headers = create_headers(
+        PRIVATE_KEY_SERIALIZED, API_KEY, method, endpoint
+    )
 
-        headers = create_headers(
-            self._private_key, self._kalshi_api_key, method, endpoint
-        )
+    response = requests.get(BASE_URL + endpoint, params=params, headers=headers)
+    markets = response.text #.json()["markets"]
 
-        response = requests.get(base_url + endpoint, params=params, headers=headers)
-        markets = response.json()["markets"]
-
-        return markets
+    return markets
 
 
-class KalshiWebSocketClient:
-    def __init__(self, kalshi_api_key: str, private_key_path: str) -> None:
-        self._kalshi_api_key = kalshi_api_key
+def get_portfolio_balance() -> float:
+    endpoint = "/portfolio/balance"
+    method = "GET"
 
-        with open(private_key_path, "rb") as f:
-            self._private_key = serialization.load_pem_private_key(
-                f.read(), password=None
-            )
+    headers = create_headers(
+        PRIVATE_KEY_SERIALIZED, API_KEY, method, endpoint
+    )
 
-    async def subscribe(self, channels: list[str], market_tickers: list[str]):
-        """Connect to WebSocket and subscribe to orderbook"""
-        base_url = "wss://api.elections.kalshi.com"
-        endpoint = "/trade-api/ws/v2"
-        method = "GET"
-        ws_headers = create_headers(
-            self._private_key, self._kalshi_api_key, method, endpoint
-        )
+    response = requests.get(BASE_URL + endpoint, headers=headers)
+    portfolio_balance = response.text #.json()['balance'] / 100
 
-        async with websockets.connect(
-            base_url + endpoint, additional_headers=ws_headers
-        ) as websocket:
-            subscribe_msg = {
-                "id": 1,
-                "cmd": "subscribe",
-                "params": {"channels": channels, "market_tickers": market_tickers},
-            }
-
-            await websocket.send(json.dumps(subscribe_msg))
-
-            async for message in websocket:
-                data = json.loads(message)
-                yield data
+    return portfolio_balance
