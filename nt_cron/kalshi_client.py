@@ -43,19 +43,15 @@ def create_headers(
     msg_string = timestamp + method + path.split("?")[0]
     signature = sign_pss_text(private_key, msg_string)
 
-    headers = {
+    return {
         "Content-Type": "application/json",
         "KALSHI-ACCESS-KEY": kalshi_api_key,
         "KALSHI-ACCESS-SIGNATURE": signature,
         "KALSHI-ACCESS-TIMESTAMP": timestamp,
     }
 
-    print(headers)
-
-    return headers
-
 def get_tickers() -> list[str]:
-    endpoint = "/markets"
+    endpoint = "/trade-api/v2/markets"
     method = "GET"
 
     params = {"limit": 1000, "status": "open", "series_ticker": "KXNCAAFGAME"}
@@ -71,27 +67,32 @@ def get_tickers() -> list[str]:
 
     return tickers
 
-def get_markets(tickers: list[str] | None = None) -> list[str]:
-    endpoint = "/markets"
+def get_markets(tickers: list[str] | None = None, series_ticker: str | None = None) -> list[str]:
+    endpoint = "/trade-api/v2/markets"
     method = "GET"
 
-    params = {"limit": 1000, "status": "open", "series_ticker": "KXNCAAFGAME"}
+    params = {"limit": 1000, "status": "open"}
 
     if tickers is not None:
         params["tickers"] = ",".join(tickers)
+    if series_ticker is not None:
+        params["series_ticker"] = series_ticker
 
     headers = create_headers(
         PRIVATE_KEY_SERIALIZED, API_KEY, method, endpoint
     )
 
     response = requests.get(BASE_URL + endpoint, params=params, headers=headers)
-    markets = response.text #.json()["markets"]
 
-    return markets
+    if response.ok:
+        return response.json()["markets"]
+    
+    else:
+        raise RuntimeError(response.text)
 
 
 def get_portfolio_balance() -> float:
-    endpoint = "/portfolio/balance"
+    endpoint = "/trade-api/v2/portfolio/balance"
     method = "GET"
 
     headers = create_headers(
@@ -99,6 +100,31 @@ def get_portfolio_balance() -> float:
     )
 
     response = requests.get(BASE_URL + endpoint, headers=headers)
-    portfolio_balance = response.text #.json()['balance'] / 100
+    portfolio_balance = response.json()['balance'] / 100
 
     return portfolio_balance
+
+def create_order(action: str, count: int, side: str, ticker: str, yes_price: int, client_order_id: str) -> float:
+    endpoint = "/trade-api/v2/portfolio/orders"
+    method = "POST"
+
+    payload = {
+        "action": action,
+        "count": count,
+        "side": side,
+        "ticker": ticker,
+        "yes_price": yes_price,
+        "client_order_id": client_order_id
+    }
+
+    headers = create_headers(
+        PRIVATE_KEY_SERIALIZED, API_KEY, method, endpoint
+    )
+
+    response = requests.post(BASE_URL + endpoint, json=payload, headers=headers)
+
+    if response.ok:
+        return response.json()
+
+    else:
+        raise RuntimeError(response.text)
