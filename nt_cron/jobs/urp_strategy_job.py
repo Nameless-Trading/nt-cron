@@ -50,15 +50,20 @@ calculate_trade_contracts = (
 )
 
 def get_portfolio_value() -> float:
+    print("\n[PORTFOLIO] Fetching portfolio balance...")
     portfolio_value = kalshi_client.get_portfolio_balance()
+    print(f"[PORTFOLIO] Current balance: ${portfolio_value:,.2f}")
     return portfolio_value
 
 def get_open_college_football_markets() -> pl.DataFrame:
+    print("\n[MARKETS] Fetching open college football markets (KXNCAAFGAME)...")
     markets = kalshi_client.get_markets(series_ticker="KXNCAAFGAME", status="open")
+    print(f"[MARKETS] Found {len(markets)} open markets")
     return markets
 
 def get_portfolio_weights(markets: pl.DataFrame, portfolio_value: float) -> pl.DataFrame:
     today = dt.date.today()
+    print(f"\n[FILTERING] Processing markets for today ({today})...")
 
     weights = (
         pl.DataFrame(markets)
@@ -97,10 +102,15 @@ def get_portfolio_weights(markets: pl.DataFrame, portfolio_value: float) -> pl.D
         .sort('ticker')
     )
 
+    print(f"[FILTERING] Found {len(weights)} qualifying markets (90-99¢, expiring today)")
+    if len(weights) > 0:
+        print(f"[ALLOCATION] Equal weight per market: {100/len(weights):.2f}% (${portfolio_value/len(weights):,.2f} each)")
+
     return weights
 
 def get_trades(weights: pl.DataFrame) -> list[dict]:
-    return (
+    print("\n[TRADES] Calculating contract quantities...")
+    trades = (
         weights
         .with_columns(
             calculate_max_contracts_expr('dollars', 'yes_ask').alias('contracts'),
@@ -113,6 +123,11 @@ def get_trades(weights: pl.DataFrame) -> list[dict]:
         .to_dicts()
     )
 
+    total_contracts = sum(t['contracts'] for t in trades)
+    print(f"[TRADES] Prepared {len(trades)} trades totaling {total_contracts} contracts")
+
+    return trades
+
 def urp_strategy_job():
     """
     URP (Underpriced Risk Premium) Strategy for College Football
@@ -124,11 +139,19 @@ def urp_strategy_job():
     - Buy YES contracts for games happening today that are priced between 90-99 cents
     - Allocate portfolio equally across all qualifying games
     """
+    print("=" * 80)
+    print("URP STRATEGY JOB - START")
+    print("=" * 80)
+
     # 1. Check if today is Thursday (4), Friday (5), or Saturday (6)
     today = dt.date.today()
+    print(f"\n[SCHEDULE] Today is {today.strftime('%A, %B %d, %Y')}")
     if today.isoweekday() not in [4, 5, 6]:
-        print(f"Today is {today.strftime('%A')} - strategy only runs on Thursday, Friday, and Saturday")
+        print(f"[SCHEDULE] Strategy only runs on Thursday, Friday, and Saturday - skipping")
+        print("=" * 80)
         return
+
+    print("[SCHEDULE] Running strategy (Thu/Fri/Sat)")
 
     # 2. Get current portfolio balance
     portfolio_value = get_portfolio_value()
@@ -140,24 +163,46 @@ def urp_strategy_job():
     weights = get_portfolio_weights(markets, portfolio_value)
 
     if len(weights) == 0:
-        print("No trades to execute")
+        print("\n[RESULT] No qualifying trades found")
+        print("=" * 80)
         return
-    
+
     # 5. Get trades
     trades = get_trades(weights)
 
     # 6. Execute trades
-    for trade in trades:
-        order = kalshi_client.create_order(
-            action='buy',
-            count=trade['contracts'],
-            side="yes",
-            ticker=trade['ticker'],
-            yes_price=trade['yes_ask'],
-            client_order_id=str(uuid.uuid4())
-        )
+    print("\n[EXECUTION] Placing orders...")
+    print("-" * 80)
+    successful_orders = 0
+    failed_orders = 0
 
-        print(f"Order placed: {trade['ticker']} - {trade['contracts']} contracts @ {trade['yes_ask']}¢")
+    for i, trade in enumerate(trades, 1):
+        try:
+            client_order_id = str(uuid.uuid4())
+            print(f"\n[{i}/{len(trades)}] Placing order for {trade['ticker']}:")
+            print(f"  → Contracts: {trade['contracts']}")
+            print(f"  → Price: {trade['yes_ask']}¢")
+            print(f"  → Client Order ID: {client_order_id}")
+
+            order = kalshi_client.create_order(
+                action='buy',
+                count=trade['contracts'],
+                side="yes",
+                ticker=trade['ticker'],
+                yes_price=trade['yes_ask'],
+                client_order_id=client_order_id
+            )
+
+            print(f"  ✓ Order placed successfully")
+            successful_orders += 1
+
+        except Exception as e:
+            print(f"  ✗ Order failed: {str(e)}")
+            failed_orders += 1
+
+    print("\n" + "-" * 80)
+    print(f"[SUMMARY] Orders placed: {successful_orders} successful, {failed_orders} failed")
+    print("=" * 80)
 
 if __name__ == '__main__':
     urp_strategy_job()
