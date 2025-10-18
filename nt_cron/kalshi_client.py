@@ -67,11 +67,11 @@ def get_tickers() -> list[str]:
 
     return tickers
 
-def get_markets(tickers: list[str] | None = None, series_ticker: str | None = None) -> list[str]:
+def get_markets(tickers: list[str] | None = None, series_ticker: str | None = None, status: str = "open") -> list[str]:
     endpoint = "/trade-api/v2/markets"
     method = "GET"
 
-    params = {"limit": 1000, "status": "open"}
+    params = {"limit": 1000, "status": status}
 
     if tickers is not None:
         params["tickers"] = ",".join(tickers)

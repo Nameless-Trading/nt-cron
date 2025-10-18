@@ -49,45 +49,30 @@ calculate_trade_contracts = (
     (pl.col('yes_ask') / 100 * (1.07 * (1 - pl.col('yes-ask') / 100)))
 )
 
-def urp_strategy_job():
-    """
-    URP (Underpriced Risk Premium) Strategy for College Football
-
-    Strategy:
-    - Only run on Thursday, Friday, and Saturday
-    - Get current portfolio value
-    - Find all active college football markets (KXCFBGAME series)
-    - Buy YES contracts for games happening today that are priced between 90-99 cents
-    - Allocate portfolio equally across all qualifying games
-    """
-    # Check if today is Thursday (4), Friday (5), or Saturday (6)
-    today = dt.date.today()
-    if today.isoweekday() not in [4, 5, 6]:
-        print(f"Today is {today.strftime('%A')} - strategy only runs on Thursday, Friday, and Saturday")
-        return
-
-    # Get current portfolio balance
+def get_portfolio_value() -> float:
     portfolio_value = kalshi_client.get_portfolio_balance()
-    print(f"Portfolio value: ${portfolio_value:.2f}")
+    return portfolio_value
 
-    # Get active college football markets
-    markets = kalshi_client.get_markets(series_ticker="KXNCAAFGAME")
-    print(f"Found {len(markets)} college football markets")
-    # Process markets and identify trades
-    trades_df = (
+def get_open_college_football_markets() -> pl.DataFrame:
+    markets = kalshi_client.get_markets(series_ticker="KXNCAAFGAME", status="open")
+    return markets
+
+def get_portfolio_weights(markets: pl.DataFrame, portfolio_value: float) -> pl.DataFrame:
+    today = dt.date.today()
+
+    weights = (
         pl.DataFrame(markets)
         .select(
             "ticker",
             "expected_expiration_time",
             "yes_ask",
         )
+        # Cast datetime
         .with_columns(
-            pl.col("expected_expiration_time")
-            .str.strptime(pl.Datetime, "%Y-%m-%dT%H:%M:%SZ")
-            .dt.convert_time_zone("utc")
+            pl.col("expected_expiration_time").str.strptime(pl.Datetime, "%Y-%m-%dT%H:%M:%SZ").dt.convert_time_zone("utc")
         )
+        # Get game day
         .with_columns(
-            pl.col('expected_expiration_time').dt.convert_time_zone('America/Denver'),
             pl.col('expected_expiration_time').dt.convert_time_zone('America/Denver').dt.date().alias('game_day')
         )
         # Filter for games priced between 90-99 cents that happen today
@@ -99,35 +84,69 @@ def urp_strategy_job():
         .with_columns(
             pl.lit(1).truediv(pl.len()).alias('weight')
         )
+        # Compute dollar allocation
         .with_columns(
             pl.col('weight').mul(portfolio_value).alias('dollars')
         )
-        .sort('expected_expiration_time')
+        .select(
+            'ticker',
+            'yes_ask',
+            'weight',
+            'dollars'
+        )
+        .sort('ticker')
     )
 
-    print(trades_df)
+    return weights
 
-    print(f"Found {len(trades_df)} games matching strategy (90-99 cents)")
+def get_trades(weights: pl.DataFrame) -> list[dict]:
+    return (
+        weights
+        .with_columns(
+            calculate_max_contracts_expr('dollars', 'yes_ask').alias('contracts'),
+        )
+        .select(
+            'ticker',
+            'yes_ask',
+            'contracts',
+        )
+        .to_dicts()
+    )
 
-    if len(trades_df) == 0:
-        print("No trades to execute")
+def urp_strategy_job():
+    """
+    URP (Underpriced Risk Premium) Strategy for College Football
+
+    Strategy:
+    - Only run on Thursday, Friday, and Saturday
+    - Get current portfolio value
+    - Find all active college football markets (KXCFBGAME series)
+    - Buy YES contracts for games happening today that are priced between 90-99 cents
+    - Allocate portfolio equally across all qualifying games
+    """
+    # 1. Check if today is Thursday (4), Friday (5), or Saturday (6)
+    today = dt.date.today()
+    if today.isoweekday() not in [4, 5, 6]:
+        print(f"Today is {today.strftime('%A')} - strategy only runs on Thursday, Friday, and Saturday")
         return
 
-    # Calculate contracts with fee adjustment using Polars expressions
-    trades_df = trades_df.with_columns([
-        calculate_max_contracts_expr('dollars', 'yes_ask').alias('contracts'),
-    ]).with_columns([
-        calculate_kalshi_fee_expr('contracts', 'yes_ask').alias('fee_cents'),
-    ]).with_columns([
-        (pl.col('fee_cents') / 100.0).alias('fee_dollars'),
-        (pl.col('contracts') * pl.col('yes_ask') / 100.0 + pl.col('fee_cents') / 100.0).alias('total_cost'),
-    ])
+    # 2. Get current portfolio balance
+    portfolio_value = get_portfolio_value()
 
-    trades = trades_df.to_dicts()
-    print("\nTrades to execute:")
-    print(trades_df.select(['ticker', 'yes_ask', 'contracts', 'total_cost']))
+    # 3. Get active college football markets
+    markets = get_open_college_football_markets()
 
-    # Execute trades
+    # 4. Process markets and identify trades
+    weights = get_portfolio_weights(markets, portfolio_value)
+
+    if len(weights) == 0:
+        print("No trades to execute")
+        return
+    
+    # 5. Get trades
+    trades = get_trades(weights)
+
+    # 6. Execute trades
     for trade in trades:
         order = kalshi_client.create_order(
             action='buy',
@@ -139,7 +158,6 @@ def urp_strategy_job():
         )
 
         print(f"Order placed: {trade['ticker']} - {trade['contracts']} contracts @ {trade['yes_ask']}¢")
-        print(order)
 
 if __name__ == '__main__':
     urp_strategy_job()
